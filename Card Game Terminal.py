@@ -30,7 +30,7 @@ def encrypt(message):
 
 # Data Base setup: read from CSV file
 try:
-    with open("DataBase.CSV", "r") as f:
+    with open("DataBase.txt", "r") as f:
         contents = f.readlines()
 except FileNotFoundError:
     with open("DataBase", "w") as f:
@@ -133,7 +133,7 @@ def randomize_deck():
 
 
 def save_game():
-    file = open("DataBase.CSV", "w")
+    file = open("DataBase.txt", "w")
     for s_name in DataBase["Names"].keys():
         tmp_out = f"{s_name},{DataBase['Names'][s_name]['Password']},{DataBase['Names'][s_name]['Score']}"
         file.write(encrypt(tmp_out) + "\n")
