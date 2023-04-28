@@ -4,11 +4,14 @@ import gmpy2  # definitely not default in python
 
 # initialize pygame window and clock
 pygame.init()
+pygame.mixer.init()
 screen = pygame.display.set_mode([1080, 720])
 clock = pygame.time.Clock()
 pygame.display.set_caption("Card Game")
 player_one = None
 player_two = None
+audio = pygame.mixer.music  # song names in song folder
+logged = False  # start with both player1 and 2 not logged in
 
 
 def key_gen():  # generates the key used for encryption / decryption of DataBase file
@@ -24,9 +27,9 @@ def decrypt(message):  # decrypts the contents of the DataBase file into a forma
     for n, c in enumerate(message):
         if c == "\n":
             k.append("\n")  # if next line puts next line in decrypted, as the \n is not encrypted in the original file
-        else:                                               # to decrypt it takes the ascii value of c and subtracts
+        else:  # to decrypt it takes the ascii value of c and subtracts
             k.append(chr(ord(c) - int(key[n % len(key)])))  # the value of key at index n
-    return "".join(k)                                   # to avoid, it errors loops to beginning if larger than len(key)
+    return "".join(k)  # to avoid, it errors loops to beginning if larger than len(key)
 
 
 def encrypt(message):  # encrypts a message that will be written to an external file
@@ -62,8 +65,40 @@ DataBase["Colours"] = {"yellow": "red", "red": "black", "black": "yellow"}
 DataBase["CardsCount"] = 10
 DataBase["KeyWords"] = {"Accept": ["yes", "ok", "y"], "Deny": ["no", "nope", "n"]}
 DataBase["Accepted_Chars"] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r",
-                              "x", "t", "u", "v", "w", "y", "s", "z", "?", "!", "@", ".", "1", "2", "3", "4", "5", "6",
+                              "x", "t", "u", "v", "w", "y", "s", "z", "1", "2", "3", "4", "5", "6",
                               "7", "8", "9", "0"]
+
+
+class MusicController:
+    def __init__(self):
+        self.music = ["boots_are_made_for_walking.mp3", "break_my_stride.mp3",
+                      "come_and_get_your_love.mp3", "dancing_in_the_moonlight.mp3", "footloose.mp3",
+                      "gimme_gimme_gimme.mp3", "video_killed_the_radio_star.mp3",
+                      "im_gonna_be_500.mp3", "our_house.mp3", "sh_boom.mp3", "smile.mp3",
+                      "tide_is_high.mp3"]
+        # ^^ holds all music file names
+        random.shuffle(self.music)  # shuffle music list
+        self.song = 0
+        audio.load(("song_folder/" + self.music[self.song]))  # starts at song index 0
+        audio.play()
+        self.pause_play = ImpButtons("play-button.png", (30, 30), (560, 665))
+        self.next = ImpButtons("next.png", (30, 30), (510, 665))
+        self.paused = False
+
+    def display_song(self):  # displays the current song playing
+        font = pygame.font.Font(None, 30)
+        song_text = font.render(str(self.music[self.song]).replace("_", " ")[:-4], True, (250, 250, 250))
+        screen.blit(song_text, (600, 670))
+        screen.blit(self.pause_play.imp, (self.pause_play.x, self.pause_play.y))
+        screen.blit(self.next.imp, (self.next.x, self.next.y))
+
+    def play_next(self):  # detects whether any song is playing or if skip
+        if not (audio.get_busy() or self.paused):
+            self.song += 1
+            if self.song == len(self.music):
+                self.song = 0
+            audio.load(("song_folder/" + self.music[self.song]))
+            audio.play()
 
 
 def reset_deck():  # creates a "fresh" deck to be used
@@ -136,11 +171,6 @@ class MiniCard:  # very similar to previous Card class but is overall smaller to
 
 
 def save():  # saves data stored in DataBase dictionary to DataBase file
-    if player_one:
-        DataBase["Names"][player_one.name]["Score"] += player_one.score  # updates dictionary score
-        DataBase["Names"][player_two.name]["Score"] += player_two.score  # updates dictionary score
-        player_one.score = 0
-        player_two.score = 0
     DataBase["LeaderBoard"] = sorted(list(DataBase["Names"].keys()), key=lambda m: DataBase["Names"][m]["Score"],
                                      reverse=True)[:5]
     file = open("DataBase.txt", "w")  # rewrites file
@@ -188,10 +218,10 @@ def sign_in():  # allows 2 users to sign in
     player2_login = False
 
     while not (player1_login and player2_login):
+        Music.play_next()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:  # exit login screen
                 return None
-
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if username_rect1.collidepoint(event.pos):  # only true when username one box clicked
                     u1active = True
@@ -214,10 +244,12 @@ def sign_in():  # allows 2 users to sign in
                     u2active = False
                     p2active = True
                 elif login1_rect.collidepoint(event.pos):  # on login button clicked
-                    if username1 in DataBase["Names"] and DataBase["Names"][username1]["Password"] == password1 and not DataBase["Names"][username1]["Logged_In"]:
+                    if username1 in DataBase["Names"] and DataBase["Names"][username1]["Password"] == password1 and not \
+                            DataBase["Names"][username1]["Logged_In"]:
                         player1_login = True  # sets player to have logged in if the username is in database and passwords match
                 elif login2_rect.collidepoint(event.pos):
-                    if username2 in DataBase["Names"] and DataBase["Names"][username2]["Password"] == password2 and not DataBase["Names"][username2]["Logged_In"]:
+                    if username2 in DataBase["Names"] and DataBase["Names"][username2]["Password"] == password2 and not \
+                            DataBase["Names"][username2]["Logged_In"]:
                         player2_login = True
                 else:
                     u1active = False
@@ -230,6 +262,16 @@ def sign_in():  # allows 2 users to sign in
                     hidden1 = not hidden1  # swaps visibility of password
                 if view2.rect.collidepoint(event.pos):
                     hidden2 = not hidden2
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
 
             if event.type == pygame.KEYDOWN and u1active:
                 if event.key == pygame.K_BACKSPACE:
@@ -268,7 +310,8 @@ def sign_in():  # allows 2 users to sign in
                     password2 = password2[:-1]
                     hidden_text2 = hidden_text2[:-1]
                 elif event.key == pygame.K_RETURN:
-                    if username2 in DataBase["Names"] and DataBase["Names"][username2]["Password"] == password2 and not DataBase["Names"][username2]["Logged_In"]:
+                    if username2 in DataBase["Names"] and DataBase["Names"][username2]["Password"] == password2 and not \
+                            DataBase["Names"][username2]["Logged_In"]:
                         player2_login = True
                 else:
                     if (char := event.unicode.lower()) in DataBase["Accepted_Chars"] and len(password2) < 14:
@@ -344,6 +387,7 @@ def sign_in():  # allows 2 users to sign in
 
         pygame.draw.rect(screen, (0, 0, 0), divider_rect)
         screen.blit(menu_button.imp, (menu_button.x, menu_button.y))  # display menu button
+        Music.display_song()
         pygame.display.flip()  # update screen
         clock.tick(60)  # make sure program runs at 60fps
     logged = True
@@ -355,7 +399,8 @@ def print_cards():
     for ver in range(360, 720, 45):  # iterates through y coordinate
         for hor in range(20, 195, 35):  # iterates through x coordinate
             if i < len(player_one.cards):
-                display_cards.append(MiniCard(hor, ver, player_one.cards[i][0], player_one.cards[i][1]))  # creates cards
+                display_cards.append(
+                    MiniCard(hor, ver, player_one.cards[i][0], player_one.cards[i][1]))  # creates cards
             i += 1
     for card in display_cards:
         card.draw()  # displays each card
@@ -376,19 +421,34 @@ def end_cond():
         player = player_one
     else:
         player = player_two
-
+    DataBase["Names"][player_one.name]["Score"] += player_one.score  # updates dictionary score
+    DataBase["Names"][player_two.name]["Score"] += player_two.score  # updates dictionary score
     viewing = True
     while viewing:
+        Music.play_next()
         screen.fill((50, 50, 50))
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 viewing = False  # return to main menu
+                continue
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if menu_button.rect.collidepoint(event.pos):
                     viewing = False  # return to main menu
+                    continue
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     viewing = False
+                    continue
 
         i = 0
         display_cards = []
@@ -404,6 +464,7 @@ def end_cond():
         win_text = base_font.render(f"You Won {player.name}, with {player.score} cards", True, (255, 255, 0))
         screen.blit(win_text, (150, 100))  # draws win dialog
         screen.blit(menu_button.imp, (menu_button.x, menu_button.y))
+        Music.display_song()
         pygame.display.flip()
 
 
@@ -421,17 +482,21 @@ def play_game():
     lose_text = base_font.render("Loser!", True, (255, 0, 0))
     winner = ""
     while playing:
+        Music.play_next()
         if len(DataBase["Deck"]) == 0:  # check if the deck is empty
             end_cond()
             playing = False
+            continue
         screen.fill((50, 50, 50))
         turn = not turn  # switch whos turn it is
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 playing = False  # exit to main menu
+                continue
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     playing = False
+                    continue
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if imp_deck.rect.collidepoint(event.pos) and not fighting:
                     winner = ""
@@ -462,6 +527,17 @@ def play_game():
 
                 if menu_button.rect.collidepoint(event.pos):
                     playing = False
+                    continue
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
 
         if fighting:
             second_card.draw()  # draw 2 playing cards
@@ -479,11 +555,14 @@ def play_game():
         screen.blit(base_font.render(("Player One: " + player_one.name), True, (255, 255, 255)), (50, 10))
         screen.blit(base_font.render(("Player Two: " + player_two.name), True, (255, 255, 255)), (700, 10))
         screen.blit(menu_button.imp, (menu_button.x, menu_button.y))
+        Music.display_song()
         pygame.display.flip()  # refresh screen
         clock.tick(60)  # 60fps
 
 
 def leaderboard():
+    DataBase["LeaderBoard"] = sorted(list(DataBase["Names"].keys()),  # updates leaderboard
+                                     key=lambda m: DataBase["Names"][m]["Score"], reverse=True)[:5]
     in_leaderboard = True
     base_font = pygame.font.Font(None, 50)
     names = []
@@ -493,21 +572,36 @@ def leaderboard():
         names.append(base_font.render(name, True, (200, 200, 200)))  # render names
         scores.append(base_font.render(str(DataBase["Names"][name]["Score"]), True, (200, 200, 200)))  # render scores
     while in_leaderboard:
+        Music.play_next()
         screen.fill((50, 50, 50))
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 in_leaderboard = False  # exit to main menu
+                continue
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if menu_button.rect.collidepoint(event.pos):
                     in_leaderboard = False
+                    continue
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     in_leaderboard = False
+                    continue
 
-        for num in range(5):  # iterate through renders names / scores and diplsay them
+        for num in range(len(names)):  # iterate through renders names / scores and display them
             screen.blit(names[num], (200, 20 + (70 * num)))
             screen.blit(scores[num], (700, 20 + (70 * num)))
         screen.blit(menu_button.imp, (menu_button.x, menu_button.y))
+        Music.display_song()
         pygame.display.flip()  # refresh screen
         clock.tick(60)  # 60fps
 
@@ -536,13 +630,15 @@ def edit_profiles():
     error_message = ""
     hidden = True
     hidden_text = ""
-    view = ImpButtons("View_password.png", (32, 32), (72, 72))  # view password button
+    view = ImpButtons("View_password.png", (32, 32), (460, 262))  # view password button
 
     while editing:
+        Music.play_next()
         screen.fill((50, 50, 50))
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 editing = False  # exit to main menu
+                continue
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if username_rect.collidepoint(event.pos):  # get when username box clicked
                     u_active = True
@@ -552,13 +648,15 @@ def edit_profiles():
                     u_active = False
                 if create_rect.collidepoint(event.pos):
                     if username not in DataBase["Names"]:
-                        DataBase["Names"][username] = {"Password": password, "Score": 0, "Logged_In": False}  # creates profile
+                        DataBase["Names"][username] = {"Password": password, "Score": 0,
+                                                       "Logged_In": False}  # creates profile
                         DataBase["LeaderBoard"] = sorted(list(DataBase["Names"].keys()),  # updates leaderboard
                                                          key=lambda m: DataBase["Names"][m]["Score"], reverse=True)[:5]
                         error = True
                         error_message = "Profile Created"
-                        print(DataBase["Names"].keys())
                         save()  # saves changes to file
+                        for name in DataBase["Names"].keys():
+                            DataBase["Names"][name]["Logged_In"] = False
                     else:
                         error = True
                         error_message = "Username already taken"  # display error message
@@ -574,6 +672,8 @@ def edit_profiles():
                             error_message = "Deleted Profile"
                             save()  # saves changes to file
                             logged = False
+                            for name in DataBase["Names"].keys():
+                                DataBase["Names"][name]["Logged_In"] = False
                         else:
                             error = True
                             error_message = "Password does not match"  # display error message
@@ -582,6 +682,20 @@ def edit_profiles():
                         error_message = "Username does not exist"  # display error message
                 if menu_button.rect.collidepoint(event.pos):
                     editing = False  # exit to main menu
+                    continue
+                if view.rect.collidepoint(event.pos):
+                    hidden = not hidden
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
+
             if event.type == pygame.KEYDOWN and u_active:
                 if event.key == pygame.K_BACKSPACE:
                     username = username[:-1]  # remove last character
@@ -600,16 +714,16 @@ def edit_profiles():
         u_colour = colour_active if u_active else colour_passive  # swap colours if active
         p_colour = colour_active if p_active else colour_passive
 
-        pygame.draw.rect(screen, u_colour, username_rect)  # draw eveything to screen
+        pygame.draw.rect(screen, u_colour, username_rect)  # draw everything to screen
         users_surf = base_font.render(username, True, (255, 255, 255))
         screen.blit(users_surf, (username_rect.x + 5, username_rect.y + 5))
         username_rect.w = 250
 
         pygame.draw.rect(screen, p_colour, password_rect)
         if hidden:
-            pass_surf = base_font.render(password, True, (255, 255, 255))
-        else:
             pass_surf = base_font.render(hidden_text, True, (255, 255, 255))
+        else:
+            pass_surf = base_font.render(password, True, (255, 255, 255))
         screen.blit(pass_surf, (password_rect.x + 5, password_rect.y + 5))
         password_rect.w = 250
 
@@ -626,8 +740,17 @@ def edit_profiles():
         if error:  # only if error message to display it displays
             screen.blit(base_font.render(error_message, True, (255, 0, 0)), (100, 100))
         screen.blit(menu_button.imp, (menu_button.x, menu_button.y))
-        pygame.display.flip()  # dispay update
+        screen.blit(view.imp, (view.x, view.y))
+        Music.display_song()
+        pygame.display.flip()  # display update
         clock.tick(60)  # 60fps
+
+
+class VolumeChanger:  # holds volume data
+    def __init__(self):
+        self.rect = pygame.Rect(900, 200, 30, 200)
+        self.controller = pygame.Rect(905, 205, 20, 20)
+        self.value = '{0:.2f}'.format(1 - ((self.controller.y - 205) / 170))
 
 
 def main_menu():
@@ -646,11 +769,15 @@ def main_menu():
     leaderboard_text = base_font.render("Leaderboard", True, (0, 0, 0))
     edit_text = base_font.render("Edit Profiles", True, (0, 0, 0))
     exit_text = base_font.render("Exit", True, (0, 0, 0))
+    sound_text = small_font.render(f"Volume: {volume.value.replace('.', '').lstrip('0')}%", True, (200, 200, 200))
+    # ^^ formats volume value to percentage
     while in_menu:
+        Music.play_next()  # plays next song if nothing is playing / skip
         screen.fill((50, 50, 50))
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 in_menu = False  # exit game
+                continue
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if sign_rect.collidepoint(event.pos):
                     sign_in()  # player 1 and 2 sign in
@@ -658,10 +785,10 @@ def main_menu():
                 if play_rect.collidepoint(event.pos) and logged:
                     play_game()  # plays game
                     save()  # saves changes to file
-                    player_one.cards = []  # resets player 1 and 2 variables
-                    player_two.cards = []
                     player_one.score = 0
                     player_two.score = 0
+                    player_one.cards = []  # resets player 1 and 2 variables
+                    player_two.cards = []
                 elif play_rect.collidepoint(event.pos):
                     error_display = small_font.render("You need to log in first", True, (255, 0, 0))
                     error = True  # display whether player1 and player2 have not logged in yet
@@ -669,8 +796,32 @@ def main_menu():
                     leaderboard()  # display leaderboard
                 if edit_rect.collidepoint(event.pos):
                     edit_profiles()  # enter edit profiles screen
+                    for name in DataBase["Names"].keys():
+                        DataBase["Names"][name]["Logged_In"] = False
                 if exit_rect.collidepoint(event.pos):
                     in_menu = False  # exit game
+                    continue
+                if volume.rect.collidepoint(event.pos):  # get clicked on volume slider
+                    volume.controller.y = event.pos[1] if 376 > event.pos[1] > 204 else (
+                        375 if event.pos[1] > 364 else 205)
+                    volume.value = '{0:.2f}'.format(1 - ((volume.controller.y - 205) / 170))
+                    audio.set_volume(float(volume.value))
+                    sound_text = small_font.render(
+                        f"Volume: {volume.value.replace('.', '').lstrip('0') if float(volume.value) > 0 else '0'}%",
+                        True, (200, 200, 200))
+                if Music.pause_play.rect.collidepoint(event.pos) and not Music.paused:
+                    audio.pause()
+                    Music.paused = True
+                elif Music.pause_play.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                if Music.next.rect.collidepoint(event.pos):
+                    audio.unpause()
+                    Music.paused = False
+                    audio.stop()
+
+        pygame.draw.rect(screen, (200, 200, 200), volume.rect)
+        pygame.draw.rect(screen, (255, 0, 0), volume.controller)
 
         pygame.draw.rect(screen, (200, 200, 200), sign_rect)  # draw buttons
         pygame.draw.rect(screen, (200, 200, 200), play_rect)
@@ -682,15 +833,51 @@ def main_menu():
         screen.blit(leaderboard_text, (leaderboard_rect.x + 10, leaderboard_rect.y + 10))
         screen.blit(edit_text, (edit_rect.x + 35, edit_rect.y + 10))
         screen.blit(exit_text, (exit_rect.x + 120, exit_rect.y + 10))
+        screen.blit(sound_text, (800, 150))
+
+        Music.display_song()
         if error:  # display error in middle of screen
             screen.blit(error_display, (530 - (error_display.get_width() // 2), 50))
         pygame.display.flip()  # display updates
         clock.tick(60)  # 60fps
 
 
+def loading_tips():  # displays tips on how to play the game
+    main_menu_screen = pygame.image.load("Main_Menu.png")  # get main menu image
+    main_menu_screen = pygame.transform.scale(main_menu_screen, (1080, 720))  # change scale so it fits screen
+    play_screen_start = pygame.image.load("Play_Sreen_Start.png")  # get first play screen image
+    play_screen_start = pygame.transform.scale(play_screen_start, (1080, 720))  # change scale so it fits screen
+    play_screen_second = pygame.image.load("Play_Screen_Second.png")
+    play_screen_second = pygame.transform.scale(play_screen_second, (1080, 720))
+    play_screen_third = pygame.image.load("Play_Screen_Third.png")
+    play_screen_third = pygame.transform.scale(play_screen_third, (1080, 720))
+    sign_in_screen = pygame.image.load("Sign_In.png")
+    sign_in_screen = pygame.transform.scale(sign_in_screen, (1080, 720))
+    images = [main_menu_screen, sign_in_screen, play_screen_start, play_screen_second, play_screen_third]
+    for num in range(600):  # ^^^ adds all images to a list, in order of appearance
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None  # skip images
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return None  # skip
+                if event.key == pygame.K_SPACE:
+                    return None  # skip
+
+        screen.blit(images[num // 120], (0, 0))  # num//120 only increases by one every 120 ticks
+        pygame.display.flip()  # refresh display
+        clock.tick(60)  # 60fps
+
+
 # driver code
-logged = False  # start with both player1 and 2 not logged in
+loading_tips()  # gives tips on how to play
+volume = VolumeChanger()  # initializes volume class
+Music = MusicController()  # initializes music controller class
 main_menu()  # starts game
+audio.stop()  # stops any current music
+pygame.mixer.quit()  # quits sound mixer
 pygame.quit()  # quits pygame
 
-# create tips boot photos and implement, sound throughout program
+# video testing, testing plan
+# double check github with someone else, finish documentation of additional sound code and bug fixed code
+# download more music, put in list
